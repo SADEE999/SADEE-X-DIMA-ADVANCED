@@ -1,4 +1,4 @@
-name: SADEE X DIMA - PAID ADVANCED V4 APK
+name: SADEE X DIMA - PAID VIP V5 APK
 
 on:
   push:
@@ -10,32 +10,32 @@ permissions:
   contents: read
 
 concurrency:
-  group: sadee-x-dima-v4
+  group: sadee-x-dima-v5
   cancel-in-progress: true
 
 jobs:
   build:
-    name: Build SADEE X DIMA V4
+    name: Build SADEE X DIMA V5
     runs-on: ubuntu-latest
 
     steps:
 
-      # 1. Get repository
+      # 1. Checkout
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 2. Find exact V4 ZIP
-      - name: Find V4 ZIP
+      # 2. Find V5 ZIP
+      - name: Find V5 ZIP
         shell: bash
         run: |
           set -e
 
           ZIP_FILE=$(find . -type f \
-            -name "SADEE_X_DIMA_PAID_ADVANCED_V4.zip" \
+            -name "SADEE_X_DIMA_PAID_ADVANCED_V5.zip" \
             -print -quit)
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: SADEE_X_DIMA_PAID_ADVANCED_V4.zip not found!"
+            echo "ERROR: V5 ZIP not found!"
             echo ""
             echo "ZIP files found:"
             find . -type f -iname "*.zip" -print
@@ -45,8 +45,8 @@ jobs:
           echo "ZIP FOUND: $ZIP_FILE"
           echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
 
-      # 3. Extract project
-      - name: Extract V4 Project
+      # 3. Extract ZIP
+      - name: Extract V5 Project
         shell: bash
         run: |
           set -e
@@ -56,9 +56,9 @@ jobs:
 
           unzip -o "$ZIP_FILE" -d extracted
 
-          echo "Extraction complete."
+          echo "V5 extraction complete."
 
-      # 4. Find Android project automatically
+      # 4. Find Android project
       - name: Find Android Project
         shell: bash
         run: |
@@ -70,9 +70,10 @@ jobs:
 
           if [ -z "$PROJECT_DIR" ]; then
             echo "ERROR: Android project not found!"
-            echo ""
-            echo "Files found:"
+
+            echo "Project files:"
             find extracted -maxdepth 8 -type f -print
+
             exit 1
           fi
 
@@ -93,7 +94,7 @@ jobs:
         with:
           packages: 'platform-tools'
 
-      # 7. Install required Android packages
+      # 7. Install SDK packages
       - name: Install Android SDK Packages
         shell: bash
         run: |
@@ -115,7 +116,7 @@ jobs:
           gradle-version: "8.7"
 
       # 9. Check project
-      - name: Check Android Project
+      - name: Check Project
         shell: bash
         run: |
           set -e
@@ -124,17 +125,17 @@ jobs:
 
           echo "======================================"
           echo " SADEE X DIMA SENSI"
-          echo " PAID ADVANCED V4"
+          echo " PAID VIP V5"
           echo "======================================"
 
           echo "Project:"
           pwd
 
           echo ""
-          echo "Project files:"
+          echo "Files:"
           ls -la
 
-      # 10. Build Debug APK
+      # 10. Build APK
       - name: Build Debug APK
         shell: bash
         run: |
@@ -165,7 +166,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: SADEE-X-DIMA-PAID-ADVANCED-V4-APK
+          name: SADEE-X-DIMA-PAID-VIP-V5-APK
           path: |
             extracted/**/build/outputs/apk/**/*.apk
           if-no-files-found: error
