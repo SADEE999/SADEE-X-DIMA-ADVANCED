@@ -1,4 +1,4 @@
-name: SADEE X DIMA - Hacker Upgrade APK
+name: SADEE X DIMA - V3 APK Build
 
 on:
   push:
@@ -10,12 +10,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: sadee-x-dima-apk
+  group: sadee-x-dima-v3
   cancel-in-progress: true
 
 jobs:
   build:
-    name: Build SADEE X DIMA APK
+    name: Build SADEE X DIMA V3
     runs-on: ubuntu-latest
 
     steps:
@@ -24,29 +24,29 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-
-      # 2. Find ZIP
-      - name: Find ZIP
+      # 2. Find V3 ZIP
+      - name: Find V3 ZIP
         shell: bash
         run: |
           set -e
 
-          echo "Searching for ZIP..."
-
-          ZIP_FILE=$(find . -maxdepth 3 -type f -iname "*.zip" | head -n 1)
+          ZIP_FILE=$(find . -type f \
+            -name "SADEE_X_DIMA_HACKER_UPGRADE_V3.zip" \
+            -print -quit)
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: ZIP file not found!"
-            find . -maxdepth 3 -type f
+            echo "ERROR: SADEE_X_DIMA_HACKER_UPGRADE_V3.zip not found!"
+            echo ""
+            echo "ZIP files found:"
+            find . -type f -iname "*.zip" -print
             exit 1
           fi
 
           echo "ZIP FOUND: $ZIP_FILE"
           echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
 
-
       # 3. Extract ZIP
-      - name: Extract Android Project
+      - name: Extract V3 Project
         shell: bash
         run: |
           set -e
@@ -56,12 +56,13 @@ jobs:
 
           unzip -o "$ZIP_FILE" -d extracted
 
-          echo "Extraction complete."
+          echo "=============================="
+          echo " EXTRACTION COMPLETE"
+          echo "=============================="
 
           find extracted -maxdepth 5 -type f | head -200
 
-
-      # 4. Find Gradle project
+      # 4. Find Android project
       - name: Find Android Project
         shell: bash
         run: |
@@ -72,15 +73,15 @@ jobs:
             -print -quit | xargs -r dirname)
 
           if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: Android project not found!"
-            find extracted -maxdepth 6 -type f
+            echo "ERROR: Android Gradle project not found!"
+            find extracted -maxdepth 7 -type f
             exit 1
           fi
 
-          echo "ANDROID PROJECT: $PROJECT_DIR"
+          echo "ANDROID PROJECT:"
+          echo "$PROJECT_DIR"
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-
 
       # 5. Java 17
       - name: Setup Java 17
@@ -90,15 +91,13 @@ jobs:
           java-version: "17"
           cache: gradle
 
-
       # 6. Android SDK
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
         with:
           packages: 'platform-tools'
 
-
-      # 7. Install SDK
+      # 7. Install Android SDK
       - name: Install Android SDK Packages
         shell: bash
         run: |
@@ -111,15 +110,13 @@ jobs:
             "platforms;android-35" \
             "build-tools;35.0.0"
 
-          echo "Android SDK READY"
-
+          echo "ANDROID SDK READY"
 
       # 8. Gradle 8.7
       - name: Setup Gradle 8.7
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.7"
-
 
       # 9. Check project
       - name: Check Project
@@ -129,7 +126,10 @@ jobs:
 
           cd "$PROJECT_DIR"
 
-          echo "PROJECT:"
+          echo "=============================="
+          echo " PROJECT DIRECTORY"
+          echo "=============================="
+
           pwd
 
           echo ""
@@ -138,49 +138,57 @@ jobs:
 
           echo ""
           echo "GRADLE FILES:"
-          find . -maxdepth 3 -type f \
+          find . -maxdepth 4 -type f \
             \( -name "build.gradle" \
-            -o -name "settings.gradle" \) \
+            -o -name "build.gradle.kts" \
+            -o -name "settings.gradle" \
+            -o -name "settings.gradle.kts" \) \
             -print
 
-
-      # 10. Build APK
-      - name: Build Debug APK
+      # 10. Build Debug APK
+      - name: Build V3 Debug APK
         shell: bash
         run: |
           set -e
 
           cd "$PROJECT_DIR"
 
-          echo "================================"
-          echo " SADEE X DIMA OPTIMIZER V2"
-          echo " HACKER UPGRADE BUILD"
-          echo "================================"
+          echo ""
+          echo "========================================"
+          echo " SADEE X DIMA SENSI"
+          echo " HACKER UPGRADE V3"
+          echo " RGB DEVICE UI"
+          echo " OPTIMIZER SADEE X DIMA"
+          echo "========================================"
+          echo ""
 
           gradle assembleDebug \
             --no-daemon \
             --stacktrace
 
+          echo ""
           echo "BUILD SUCCESSFUL"
-
 
       # 11. Find APK
       - name: Find APK
         shell: bash
         run: |
-          echo "APK FILES:"
+          set -e
+
+          echo "=============================="
+          echo " APK FILES"
+          echo "=============================="
 
           find "$PROJECT_DIR" \
             -type f \
             -name "*.apk" \
             -print
 
-
       # 12. Upload APK
-      - name: Upload APK
+      - name: Upload V3 APK
         uses: actions/upload-artifact@v4
         with:
-          name: SADEE-X-DIMA-HACKER-V2-APK
+          name: SADEE-X-DIMA-SENSI-V3-APK
           path: |
             extracted/**/build/outputs/apk/**/*.apk
           if-no-files-found: error
