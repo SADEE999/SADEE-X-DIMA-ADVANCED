@@ -97,7 +97,7 @@ jobs:
           with open(path, "w", encoding="utf-8") as f:
               f.write(s)
 
-          print("Gaming callback compatibility fix completed.")
+          print("Gaming callback fix completed.")
           PY
 
       - name: Setup Java 17
@@ -124,7 +124,6 @@ jobs:
           fi
 
           cd "$DIR"
-
           chmod +x gradlew 2>/dev/null || true
 
           if [ -f gradlew ]; then
@@ -146,7 +145,6 @@ jobs:
           fi
 
           cd "$DIR"
-
           chmod +x gradlew 2>/dev/null || true
 
           if [ -f gradlew ]; then
@@ -163,14 +161,10 @@ jobs:
           mkdir -p release
 
           GAME=$(find extracted/gaming-app \
-            -type f \
-            -name "*.apk" \
-            | head -1)
+            -type f -name "*.apk" | head -1)
 
           ADMIN=$(find extracted/admin-app \
-            -type f \
-            -name "*.apk" \
-            | head -1)
+            -type f -name "*.apk" | head -1)
 
           if [ -z "$GAME" ]; then
             echo "Gaming APK not found"
@@ -225,7 +219,6 @@ jobs:
         shell: bash
         run: |
           set -e
-
           rm -rf extracted
           mkdir -p extracted
           unzip -o "$ZIP" -d extracted
@@ -247,7 +240,6 @@ jobs:
           fi
 
           DIR=$(dirname "$INDEX")
-
           echo "ADMIN_DIR=$DIR" >> "$GITHUB_ENV"
 
           echo "Admin panel found: $DIR"
