@@ -29,6 +29,7 @@ jobs:
         shell: bash
         run: |
           set -e
+
           ZIP=$(find . -maxdepth 1 -type f -iname "*.zip" | head -1)
 
           if [ -z "$ZIP" ]; then
@@ -37,7 +38,7 @@ jobs:
           fi
 
           echo "ZIP=$ZIP" >> "$GITHUB_ENV"
-          echo "Using source: $ZIP"
+          echo "Using: $ZIP"
 
       - name: Extract Source
         shell: bash
@@ -62,7 +63,15 @@ jobs:
         shell: bash
         run: |
           set -e
-          cd "$(find extracted -type d -name gaming-app | head -1)"
+
+          DIR=$(find extracted -type d -name "gaming-app" | head -1)
+
+          if [ -z "$DIR" ]; then
+            echo "gaming-app not found"
+            exit 1
+          fi
+
+          cd "$DIR"
 
           chmod +x gradlew 2>/dev/null || true
 
@@ -76,7 +85,15 @@ jobs:
         shell: bash
         run: |
           set -e
-          cd "$(find extracted -type d -name admin-app | head -1)"
+
+          DIR=$(find extracted -type d -name "admin-app" | head -1)
+
+          if [ -z "$DIR" ]; then
+            echo "admin-app not found"
+            exit 1
+          fi
+
+          cd "$DIR"
 
           chmod +x gradlew 2>/dev/null || true
 
@@ -93,14 +110,14 @@ jobs:
 
           mkdir -p release
 
-          GAME=$(find extracted \
+          GAME=$(find extracted/gaming-app \
             -type f \
-            -path "*/gaming-app/app/build/outputs/apk/*/*.apk" \
+            -name "*.apk" \
             | head -1)
 
-          ADMIN=$(find extracted \
+          ADMIN=$(find extracted/admin-app \
             -type f \
-            -path "*/admin-app/app/build/outputs/apk/*/*.apk" \
+            -name "*.apk" \
             | head -1)
 
           if [ -z "$GAME" ]; then
