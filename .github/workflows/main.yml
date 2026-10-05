@@ -1,4 +1,4 @@
-name: SADEE X DIMA - Extract + Build App + Admin
+name: SADEE X DIMA - Build Gaming App + Admin App + Admin Web
 
 on:
   workflow_dispatch:
@@ -12,17 +12,17 @@ permissions:
   id-token: write
 
 concurrency:
-  group: sadee-x-dima
+  group: sadee-x-dima-all
   cancel-in-progress: true
 
 jobs:
 
-  # =====================================================
-  # ANDROID APP
-  # =====================================================
+  # =========================================================
+  # BUILD ANDROID APPS
+  # =========================================================
 
-  build-android:
-    name: Extract ZIP and Build APK
+  build-apps:
+    name: Build Gaming Optimizer + Admin APK
     runs-on: ubuntu-latest
 
     steps:
@@ -30,12 +30,23 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      # -----------------------------------------------------
+      # FIND ZIP
+      # -----------------------------------------------------
+
       - name: Find ZIP
         shell: bash
         run: |
           set -e
 
-          ZIP_FILE=$(find . -maxdepth 1 -type f -iname "*.zip" -print -quit)
+          echo "Searching for ZIP..."
+
+          ZIP_FILE=$(find . \
+            -maxdepth 1 \
+            -type f \
+            -iname "*.zip" \
+            -print \
+            -quit)
 
           if [ -z "$ZIP_FILE" ]; then
             echo "ERROR: No ZIP file found in repository root."
@@ -43,8 +54,14 @@ jobs:
             exit 1
           fi
 
-          echo "ZIP FOUND: $ZIP_FILE"
+          echo "ZIP FOUND:"
+          echo "$ZIP_FILE"
+
           echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
+
+      # -----------------------------------------------------
+      # EXTRACT ZIP
+      # -----------------------------------------------------
 
       - name: Extract ZIP
         shell: bash
@@ -54,31 +71,63 @@ jobs:
           rm -rf extracted
           mkdir -p extracted
 
+          echo "Extracting:"
+          echo "$ZIP_FILE"
+
           unzip -o "$ZIP_FILE" -d extracted
 
-          echo "ZIP extracted successfully."
-          find extracted -maxdepth 4 -type f | head -150
+          echo ""
+          echo "EXTRACTION COMPLETE"
+          echo ""
 
-      - name: Locate Android Project
+          find extracted -maxdepth 3 -type f | head -200
+
+      # -----------------------------------------------------
+      # VERIFY PROJECTS
+      # -----------------------------------------------------
+
+      - name: Verify Projects
         shell: bash
         run: |
           set -e
 
-          APP_DIR=$(find extracted \
-            -type f \
-            \( -name "settings.gradle" -o -name "settings.gradle.kts" \) \
-            -print -quit)
+          echo "Checking Gaming Optimizer..."
 
-          if [ -z "$APP_DIR" ]; then
-            echo "ERROR: Android project not found."
-            find extracted -maxdepth 5 -type f
+          if [ ! -f "extracted/gaming-app/settings.gradle" ] && \
+             [ ! -f "extracted/gaming-app/settings.gradle.kts" ]; then
+            echo "ERROR: gaming-app Android project not found."
+            find extracted -maxdepth 4 -type f
             exit 1
           fi
 
-          APP_DIR=$(dirname "$APP_DIR")
+          echo "Gaming Optimizer OK"
 
-          echo "ANDROID PROJECT: $APP_DIR"
-          echo "ANDROID_PROJECT=$APP_DIR" >> "$GITHUB_ENV"
+          echo ""
+          echo "Checking Admin App..."
+
+          if [ ! -f "extracted/admin-app/settings.gradle" ] && \
+             [ ! -f "extracted/admin-app/settings.gradle.kts" ]; then
+            echo "ERROR: admin-app Android project not found."
+            find extracted -maxdepth 4 -type f
+            exit 1
+          fi
+
+          echo "Admin App OK"
+
+          echo ""
+          echo "Checking Admin Web..."
+
+          if [ ! -f "extracted/admin-panel/index.html" ]; then
+            echo "ERROR: admin-panel/index.html not found."
+            find extracted -type f -name "index.html"
+            exit 1
+          fi
+
+          echo "Admin Web OK"
+
+      # -----------------------------------------------------
+      # JAVA 17
+      # -----------------------------------------------------
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -87,71 +136,140 @@ jobs:
           java-version: "17"
           cache: gradle
 
+      # -----------------------------------------------------
+      # GRADLE 8.9
+      # -----------------------------------------------------
+
       - name: Setup Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
 
-      - name: Build APK
-        working-directory: ${{ env.ANDROID_PROJECT }}
+      # =====================================================
+      # GAMING OPTIMIZER APK
+      # =====================================================
+
+      - name: Build Gaming Optimizer APK
+        working-directory: extracted/gaming-app
         shell: bash
         run: |
           set -e
 
-          echo "Building Android APK..."
+          echo "======================================"
+          echo " BUILDING SADEE X DIMA GAMING APP"
+          echo "======================================"
 
           if [ -f "./gradlew" ]; then
             chmod +x ./gradlew
-            ./gradlew --no-daemon --stacktrace clean assembleDebug
+
+            ./gradlew \
+              --no-daemon \
+              --stacktrace \
+              clean \
+              assembleDebug
           else
-            gradle --no-daemon --stacktrace clean assembleDebug
+            gradle \
+              --no-daemon \
+              --stacktrace \
+              clean \
+              assembleDebug
           fi
 
-      - name: Find APK
+      # =====================================================
+      # ADMIN APK
+      # =====================================================
+
+      - name: Build Admin APK
+        working-directory: extracted/admin-app
         shell: bash
         run: |
           set -e
 
-          APK=$(find "$ANDROID_PROJECT/app/build/outputs/apk" \
-            -type f \
-            -name "*.apk" \
-            -print -quit)
+          echo "======================================"
+          echo " BUILDING SADEE X DIMA ADMIN APP"
+          echo "======================================"
 
-          if [ -z "$APK" ]; then
-            echo "ERROR: APK was not created."
-            find "$ANDROID_PROJECT/app/build" -type f | head -100
-            exit 1
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+
+            ./gradlew \
+              --no-daemon \
+              --stacktrace \
+              clean \
+              assembleDebug
+          else
+            gradle \
+              --no-daemon \
+              --stacktrace \
+              clean \
+              assembleDebug
           fi
 
-          echo "APK FOUND: $APK"
-          echo "APK_PATH=$APK" >> "$GITHUB_ENV"
+      # =====================================================
+      # COLLECT APK FILES
+      # =====================================================
 
-      - name: Prepare APK
+      - name: Collect APKs
         shell: bash
         run: |
           set -e
 
           mkdir -p release
 
-          cp "$APK_PATH" \
+          GAMING_APK=$(find \
+            extracted/gaming-app/app/build/outputs/apk \
+            -type f \
+            -name "*.apk" \
+            -print \
+            -quit)
+
+          ADMIN_APK=$(find \
+            extracted/admin-app/app/build/outputs/apk \
+            -type f \
+            -name "*.apk" \
+            -print \
+            -quit)
+
+          if [ -z "$GAMING_APK" ]; then
+            echo "ERROR: Gaming APK not found."
+            find extracted/gaming-app/app/build -type f | head -100
+            exit 1
+          fi
+
+          if [ -z "$ADMIN_APK" ]; then
+            echo "ERROR: Admin APK not found."
+            find extracted/admin-app/app/build -type f | head -100
+            exit 1
+          fi
+
+          cp "$GAMING_APK" \
             release/SADEE_X_DIMA_GAMING_OPTIMIZER.apk
 
+          cp "$ADMIN_APK" \
+            release/SADEE_X_DIMA_ADMIN.apk
+
+          echo ""
+          echo "APK FILES:"
           ls -lh release/
 
-      - name: Upload APK Artifact
+      # =====================================================
+      # UPLOAD APK ARTIFACT
+      # =====================================================
+
+      - name: Upload Android APKs
         uses: actions/upload-artifact@v4
         with:
-          name: SADEE-X-DIMA-GAMING-OPTIMIZER
-          path: release/SADEE_X_DIMA_GAMING_OPTIMIZER.apk
+          name: SADEE-X-DIMA-ANDROID-APPS
+          path: release/*.apk
           retention-days: 30
 
 
-  # =====================================================
-  # ADMIN PANEL
-  # =====================================================
+  # =========================================================
+  # DEPLOY ADMIN WEB PANEL
+  # =========================================================
 
-  deploy-admin:
-    name: Extract ZIP and Deploy Admin Panel
+  deploy-admin-web:
+    name: Deploy Admin Web Panel
     runs-on: ubuntu-latest
 
     environment:
@@ -160,24 +278,47 @@ jobs:
 
     steps:
 
+      # -----------------------------------------------------
+      # CHECKOUT
+      # -----------------------------------------------------
+
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      # -----------------------------------------------------
+      # FIND ZIP
+      # -----------------------------------------------------
 
       - name: Find ZIP
         shell: bash
         run: |
           set -e
 
-          ZIP_FILE=$(find . -maxdepth 1 -type f -iname "*.zip" -print -quit)
+          echo "Searching for ZIP..."
+
+          ZIP_FILE=$(find . \
+            -maxdepth 1 \
+            -type f \
+            -iname "*.zip" \
+            -print \
+            -quit)
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: No ZIP file found in repository root."
+            echo "ERROR: No ZIP file found."
+
             ls -la
+
             exit 1
           fi
 
-          echo "ZIP FOUND: $ZIP_FILE"
+          echo "ZIP FOUND:"
+          echo "$ZIP_FILE"
+
           echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
+
+      # -----------------------------------------------------
+      # EXTRACT
+      # -----------------------------------------------------
 
       - name: Extract ZIP
         shell: bash
@@ -190,6 +331,10 @@ jobs:
           unzip -o "$ZIP_FILE" -d extracted
 
           echo "ZIP extracted successfully."
+
+      # -----------------------------------------------------
+      # LOCATE ADMIN PANEL
+      # -----------------------------------------------------
 
       - name: Locate Admin Panel
         shell: bash
@@ -201,42 +346,69 @@ jobs:
           ADMIN_INDEX=$(find extracted \
             -type f \
             -path "*/admin-panel/index.html" \
-            -print -quit)
+            -print \
+            -quit)
 
           if [ -z "$ADMIN_INDEX" ]; then
+
             echo "ERROR: admin-panel/index.html not found."
 
+            echo ""
             echo "Available index.html files:"
-            find extracted -type f -name "index.html"
+
+            find extracted \
+              -type f \
+              -name "index.html"
 
             exit 1
           fi
 
           ADMIN_DIR=$(dirname "$ADMIN_INDEX")
 
+          echo ""
           echo "ADMIN PANEL FOUND:"
           echo "$ADMIN_DIR"
 
           echo "ADMIN_DIR=$ADMIN_DIR" >> "$GITHUB_ENV"
+
+      # -----------------------------------------------------
+      # CHECK ADMIN FILES
+      # -----------------------------------------------------
 
       - name: Check Admin Panel
         shell: bash
         run: |
           set -e
 
-          echo "Admin panel directory:"
+          echo "Admin directory:"
           echo "$ADMIN_DIR"
 
+          echo ""
           echo "Admin files:"
-          find "$ADMIN_DIR" -maxdepth 2 -type f
+
+          find "$ADMIN_DIR" \
+            -maxdepth 3 \
+            -type f
+
+      # -----------------------------------------------------
+      # CONFIGURE GITHUB PAGES
+      # -----------------------------------------------------
 
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v5
+
+      # -----------------------------------------------------
+      # UPLOAD WEBSITE
+      # -----------------------------------------------------
 
       - name: Upload Admin Panel
         uses: actions/upload-pages-artifact@v3
         with:
           path: ${{ env.ADMIN_DIR }}
+
+      # -----------------------------------------------------
+      # DEPLOY
+      # -----------------------------------------------------
 
       - name: Deploy Admin Panel
         id: deployment
