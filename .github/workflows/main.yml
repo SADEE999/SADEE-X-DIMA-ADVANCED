@@ -48,7 +48,7 @@ jobs:
           mkdir -p extracted
           unzip -o "$ZIP" -d extracted
 
-      - name: Fix Gaming Source
+      - name: Fix Gaming App Lambda Callbacks
         shell: bash
         run: |
           set -e
@@ -63,37 +63,46 @@ jobs:
             exit 1
           fi
 
-          echo "Patching: $FILE"
+          echo "Fixing: $FILE"
 
           python3 - "$FILE" <<'PY'
           import sys
+          import re
 
           path = sys.argv[1]
 
           with open(path, "r", encoding="utf-8") as f:
               s = f.read()
 
-          replacements = {
-              'gameCard("FREE FIRE","freefire_art",CYAN,()->':
-              'gameCard("FREE FIRE","freefire_art",CYAN,(v)->',
+          # Fix callback lambdas passed to gameCard(...)
+          s = re.sub(
+              r'(gameCard\("FREE FIRE","freefire_art",CYAN),\(\)->',
+              r'\1,(v)->',
+              s
+          )
 
-              'gameCard("FREE FIRE MAX","freefire_art",RED,()->':
-              'gameCard("FREE FIRE MAX","freefire_art",RED,(v)->',
+          s = re.sub(
+              r'(gameCard\("FREE FIRE MAX","freefire_art",RED),\(\)->',
+              r'\1,(v)->',
+              s
+          )
 
-              'gameCard("PUBG MOBILE","pubg_art",PURPLE,()->':
-              'gameCard("PUBG MOBILE","pubg_art",PURPLE,(v)->',
+          s = re.sub(
+              r'(gameCard\("PUBG MOBILE","pubg_art",PURPLE),\(\)->',
+              r'\1,(v)->',
+              s
+          )
 
-              'gameCard("COD MOBILE","cod_art",CYAN,()->':
-              'gameCard("COD MOBILE","cod_art",CYAN,(v)->'
-          }
-
-          for old, new in replacements.items():
-              s = s.replace(old, new)
+          s = re.sub(
+              r'(gameCard\("COD MOBILE","cod_art",CYAN),\(\)->',
+              r'\1,(v)->',
+              s
+          )
 
           with open(path, "w", encoding="utf-8") as f:
               f.write(s)
 
-          print("Gaming lambda callback fix applied.")
+          print("Lambda callback fix completed.")
           PY
 
       - name: Setup Java 17
