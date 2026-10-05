@@ -1,4 +1,4 @@
-name: SADEE X DIMA - Build All Apps + Admin Web
+name: SADEE X DIMA - FINAL BUILD + ADMIN WEB
 
 on:
   workflow_dispatch:
@@ -12,35 +12,47 @@ permissions:
   id-token: write
 
 concurrency:
-  group: sadee-x-dima-build
+  group: sadee-x-dima-final
   cancel-in-progress: true
 
 jobs:
 
   build-android:
-    name: Build Android Apps
+    name: Build Gaming + Admin APK
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Find Source ZIP
+      - name: Find FINAL ZIP
         shell: bash
         run: |
           set -e
 
-          ZIP=$(find . -maxdepth 1 -type f -iname "*.zip" | head -1)
+          ZIP=""
+
+          for f in \
+            "./SADEE_X_DIMA_LICENSE_100_PERCENT_FIXED_FINAL.zip" \
+            "./SADEE_X_DIMA_LICENSE_100_PERCENT_FIXED.zip"
+          do
+            if [ -f "$f" ]; then
+              ZIP="$f"
+              break
+            fi
+          done
 
           if [ -z "$ZIP" ]; then
-            echo "No source ZIP found"
+            echo "FINAL source ZIP not found"
+            echo "ZIP files in repository:"
+            find . -maxdepth 1 -type f -iname "*.zip" -print
             exit 1
           fi
 
+          echo "Using FINAL ZIP: $ZIP"
           echo "ZIP=$ZIP" >> "$GITHUB_ENV"
-          echo "Using: $ZIP"
 
-      - name: Extract Source
+      - name: Extract FINAL Source
         shell: bash
         run: |
           set -e
@@ -48,57 +60,31 @@ jobs:
           mkdir -p extracted
           unzip -o "$ZIP" -d extracted
 
-      - name: Fix Gaming App Lambda Callbacks
+      - name: Verify Source
         shell: bash
         run: |
           set -e
 
-          FILE=$(find extracted \
-            -type f \
-            -path "*/gaming-app/app/src/main/java/com/sadee/gamingoptimizer/MainActivity.java" \
-            | head -1)
+          GAME="extracted/gaming-app/app/src/main/java/com/sadee/gamingoptimizer/MainActivity.java"
 
-          if [ -z "$FILE" ]; then
-            echo "MainActivity.java not found"
+          if [ ! -f "$GAME" ]; then
+            echo "Gaming MainActivity.java missing"
             exit 1
           fi
 
-          python3 - "$FILE" <<'PY'
-          import sys
-          import re
+          echo "Checking license RPC..."
+          grep -q 'validate_license' "$GAME"
 
-          path = sys.argv[1]
+          echo "Checking key_code..."
+          grep -q 'p_key_code' "$GAME"
 
-          with open(path, "r", encoding="utf-8") as f:
-              s = f.read()
+          echo "Checking username..."
+          grep -q 'p_username' "$GAME"
 
-          fixes = [
-              (
-                  r'(gameCard\("FREE FIRE","freefire_art",CYAN),\(\)->',
-                  r'\1,(v)->'
-              ),
-              (
-                  r'(gameCard\("FREE FIRE MAX","freefire_art",RED),\(\)->',
-                  r'\1,(v)->'
-              ),
-              (
-                  r'(gameCard\("PUBG MOBILE","pubg_art",PURPLE),\(\)->',
-                  r'\1,(v)->'
-              ),
-              (
-                  r'(gameCard\("COD MOBILE","cod_art",CYAN),\(\)->',
-                  r'\1,(v)->'
-              )
-          ]
+          echo "Checking device ID..."
+          grep -q 'p_device_id' "$GAME"
 
-          for old, new in fixes:
-              s = re.sub(old, new, s)
-
-          with open(path, "w", encoding="utf-8") as f:
-              f.write(s)
-
-          print("Gaming callback fix completed.")
-          PY
+          echo "Source verification PASSED."
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -116,14 +102,8 @@ jobs:
         run: |
           set -e
 
-          DIR=$(find extracted -type d -name "gaming-app" | head -1)
+          cd extracted/gaming-app
 
-          if [ -z "$DIR" ]; then
-            echo "gaming-app not found"
-            exit 1
-          fi
-
-          cd "$DIR"
           chmod +x gradlew 2>/dev/null || true
 
           if [ -f gradlew ]; then
@@ -137,14 +117,8 @@ jobs:
         run: |
           set -e
 
-          DIR=$(find extracted -type d -name "admin-app" | head -1)
+          cd extracted/admin-app
 
-          if [ -z "$DIR" ]; then
-            echo "admin-app not found"
-            exit 1
-          fi
-
-          cd "$DIR"
           chmod +x gradlew 2>/dev/null || true
 
           if [ -f gradlew ]; then
@@ -160,10 +134,10 @@ jobs:
 
           mkdir -p release
 
-          GAME=$(find extracted/gaming-app \
+          GAME=$(find extracted/gaming-app/app/build/outputs/apk \
             -type f -name "*.apk" | head -1)
 
-          ADMIN=$(find extracted/admin-app \
+          ADMIN=$(find extracted/admin-app/app/build/outputs/apk \
             -type f -name "*.apk" | head -1)
 
           if [ -z "$GAME" ]; then
@@ -179,12 +153,13 @@ jobs:
           cp "$GAME" release/SADEE_X_DIMA_GAMING_OPTIMIZER.apk
           cp "$ADMIN" release/SADEE_X_DIMA_ADMIN.apk
 
+          echo "FINAL APKs:"
           ls -lh release
 
       - name: Upload APKs
         uses: actions/upload-artifact@v4
         with:
-          name: SADEE-X-DIMA-APKS
+          name: SADEE-X-DIMA-FINAL-APKS
           path: release/*.apk
           retention-days: 30
 
@@ -201,21 +176,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Find Source ZIP
+      - name: Find FINAL ZIP
         shell: bash
         run: |
           set -e
 
-          ZIP=$(find . -maxdepth 1 -type f -iname "*.zip" | head -1)
+          ZIP=""
+
+          for f in \
+            "./SADEE_X_DIMA_LICENSE_100_PERCENT_FIXED_FINAL.zip" \
+            "./SADEE_X_DIMA_LICENSE_100_PERCENT_FIXED.zip"
+          do
+            if [ -f "$f" ]; then
+              ZIP="$f"
+              break
+            fi
+          done
 
           if [ -z "$ZIP" ]; then
-            echo "No source ZIP found"
+            echo "FINAL source ZIP not found"
             exit 1
           fi
 
           echo "ZIP=$ZIP" >> "$GITHUB_ENV"
 
-      - name: Extract Source
+      - name: Extract FINAL Source
         shell: bash
         run: |
           set -e
@@ -235,14 +220,14 @@ jobs:
 
           if [ -z "$INDEX" ]; then
             echo "admin-panel/index.html not found"
-            find extracted -type f -name "*.html"
             exit 1
           fi
 
           DIR=$(dirname "$INDEX")
+
           echo "ADMIN_DIR=$DIR" >> "$GITHUB_ENV"
 
-          echo "Admin panel found: $DIR"
+          echo "Admin panel: $DIR"
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
