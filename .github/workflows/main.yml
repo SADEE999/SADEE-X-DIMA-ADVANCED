@@ -25,7 +25,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Find ZIP
+      - name: Find Source ZIP
         shell: bash
         run: |
           set -e
@@ -37,14 +37,14 @@ jobs:
           fi
 
           echo "ZIP=$ZIP" >> "$GITHUB_ENV"
-          echo "Using: $ZIP"
+          echo "Using source: $ZIP"
 
-      - name: Extract ZIP
+      - name: Extract Source
         shell: bash
         run: |
           set -e
           rm -rf extracted
-          mkdir extracted
+          mkdir -p extracted
           unzip -o "$ZIP" -d extracted
 
       - name: Setup Java 17
@@ -59,10 +59,11 @@ jobs:
           gradle-version: "8.9"
 
       - name: Build Gaming Optimizer
-        working-directory: extracted/gaming-app
         shell: bash
         run: |
           set -e
+          cd "$(find extracted -type d -name gaming-app | head -1)"
+
           chmod +x gradlew 2>/dev/null || true
 
           if [ -f gradlew ]; then
@@ -72,10 +73,11 @@ jobs:
           fi
 
       - name: Build Admin App
-        working-directory: extracted/admin-app
         shell: bash
         run: |
           set -e
+          cd "$(find extracted -type d -name admin-app | head -1)"
+
           chmod +x gradlew 2>/dev/null || true
 
           if [ -f gradlew ]; then
@@ -91,11 +93,15 @@ jobs:
 
           mkdir -p release
 
-          GAME=$(find extracted/gaming-app/app/build/outputs/apk \
-            -type f -name "*.apk" | head -1)
+          GAME=$(find extracted \
+            -type f \
+            -path "*/gaming-app/app/build/outputs/apk/*/*.apk" \
+            | head -1)
 
-          ADMIN=$(find extracted/admin-app/app/build/outputs/apk \
-            -type f -name "*.apk" | head -1)
+          ADMIN=$(find extracted \
+            -type f \
+            -path "*/admin-app/app/build/outputs/apk/*/*.apk" \
+            | head -1)
 
           if [ -z "$GAME" ]; then
             echo "Gaming APK not found"
@@ -132,7 +138,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Find ZIP
+      - name: Find Source ZIP
         shell: bash
         run: |
           set -e
@@ -146,12 +152,13 @@ jobs:
 
           echo "ZIP=$ZIP" >> "$GITHUB_ENV"
 
-      - name: Extract ZIP
+      - name: Extract Source
         shell: bash
         run: |
           set -e
+
           rm -rf extracted
-          mkdir extracted
+          mkdir -p extracted
           unzip -o "$ZIP" -d extracted
 
       - name: Find Admin Panel
@@ -174,17 +181,17 @@ jobs:
 
           echo "ADMIN_DIR=$DIR" >> "$GITHUB_ENV"
 
-          echo "Admin panel:"
+          echo "Admin panel found:"
           echo "$DIR"
 
-      - name: Configure Pages
+      - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload Pages Artifact
+      - name: Upload Admin Panel
         uses: actions/upload-pages-artifact@v3
         with:
           path: ${{ env.ADMIN_DIR }}
 
-      - name: Deploy Pages
+      - name: Deploy Admin Panel
         id: deployment
         uses: actions/deploy-pages@v4
