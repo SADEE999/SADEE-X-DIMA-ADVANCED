@@ -63,8 +63,6 @@ jobs:
             exit 1
           fi
 
-          echo "Fixing: $FILE"
-
           python3 - "$FILE" <<'PY'
           import sys
           import re
@@ -74,35 +72,32 @@ jobs:
           with open(path, "r", encoding="utf-8") as f:
               s = f.read()
 
-          # Fix callback lambdas passed to gameCard(...)
-          s = re.sub(
-              r'(gameCard\("FREE FIRE","freefire_art",CYAN),\(\)->',
-              r'\1,(v)->',
-              s
-          )
+          fixes = [
+              (
+                  r'(gameCard\("FREE FIRE","freefire_art",CYAN),\(\)->',
+                  r'\1,(v)->'
+              ),
+              (
+                  r'(gameCard\("FREE FIRE MAX","freefire_art",RED),\(\)->',
+                  r'\1,(v)->'
+              ),
+              (
+                  r'(gameCard\("PUBG MOBILE","pubg_art",PURPLE),\(\)->',
+                  r'\1,(v)->'
+              ),
+              (
+                  r'(gameCard\("COD MOBILE","cod_art",CYAN),\(\)->',
+                  r'\1,(v)->'
+              )
+          ]
 
-          s = re.sub(
-              r'(gameCard\("FREE FIRE MAX","freefire_art",RED),\(\)->',
-              r'\1,(v)->',
-              s
-          )
-
-          s = re.sub(
-              r'(gameCard\("PUBG MOBILE","pubg_art",PURPLE),\(\)->',
-              r'\1,(v)->',
-              s
-          )
-
-          s = re.sub(
-              r'(gameCard\("COD MOBILE","cod_art",CYAN),\(\)->',
-              r'\1,(v)->',
-              s
-          )
+          for old, new in fixes:
+              s = re.sub(old, new, s)
 
           with open(path, "w", encoding="utf-8") as f:
               f.write(s)
 
-          print("Lambda callback fix completed.")
+          print("Gaming callback compatibility fix completed.")
           PY
 
       - name: Setup Java 17
@@ -255,8 +250,7 @@ jobs:
 
           echo "ADMIN_DIR=$DIR" >> "$GITHUB_ENV"
 
-          echo "Admin panel found:"
-          echo "$DIR"
+          echo "Admin panel found: $DIR"
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
