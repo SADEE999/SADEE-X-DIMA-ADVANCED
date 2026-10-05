@@ -1,9 +1,6 @@
 name: Extract Project ZIP
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
@@ -41,54 +38,115 @@ jobs:
 
           ZIP="${{ steps.find_zip.outputs.zip }}"
 
+          rm -rf extracted
           mkdir -p extracted
+
           unzip -o "$ZIP" -d extracted
 
           echo "ZIP extracted successfully."
 
-      - name: Flatten extracted folder
+      - name: Flatten project
         shell: bash
         run: |
           set -e
 
-          # Find the folder containing the actual project files
-          if [ -f "extracted/index.html" ] || [ -f "extracted/settings.gradle" ] || [ -f "extracted/settings.gradle.kts" ]; then
-            echo "Project files are already at root level."
+          if [ -f "extracted/settings.gradle" ] || \
+             [ -f "extracted/settings.gradle.kts" ] || \
+             [ -f "extracted/index.html" ]; then
+
+            echo "Project already at root."
+
           else
-            FIRST_DIR=$(find extracted -mindepth 1 -maxdepth 1 -type d | head -n 1)
+
+            FIRST_DIR=$(find extracted \
+              -mindepth 1 \
+              -maxdepth 1 \
+              -type d \
+              ! -name ".github" \
+              | head -n 1)
 
             if [ -n "$FIRST_DIR" ]; then
-              echo "Moving project files from: $FIRST_DIR"
+              echo "Project folder: $FIRST_DIR"
 
-              shopt -s dotglob
-              mv "$FIRST_DIR"/* extracted/
-              rmdir "$FIRST_DIR" || true
+              shopt -s dotglob nullglob
+
+              mkdir -p project
+
+              for item in "$FIRST_DIR"/*; do
+                base=$(basename "$item")
+
+                if [ "$base" != ".github" ]; then
+                  mv "$item" project/
+                fi
+              done
+
+              rm -rf "$FIRST_DIR"
+
+              shopt -u dotglob nullglob
             fi
           fi
 
-      - name: Copy extracted files to repository
+      - name: Copy project files
         shell: bash
         run: |
           set -e
 
-          shopt -s dotglob
+          shopt -s dotglob nullglob
 
-          # Remove ZIP and temporary extraction directory
-          rm -f "${{ steps.find_zip.outputs.zip }}"
+          # Remove only the uploaded ZIP
+          ZIP="${{ steps.find_zip.outputs.zip }}"
+          rm -f "$ZIP"
 
-          # Copy extracted project files to repository root
-          cp -R extracted/* .
+          # Copy extracted project files
+          for item in extracted/*; do
+            base=$(basename "$item")
+
+            # IMPORTANT:
+            # Never copy .github from ZIP.
+            if [ "$base" = ".github" ]; then
+              continue
+            fi
+
+            cp -R "$item" .
+          done
+
+          # Copy nested project folder if created
+          if [ -d "project" ]; then
+            for item in project/*; do
+              cp -R "$item" .
+            done
+
+            rm -rf project
+          fi
 
           rm -rf extracted
 
-      - name: Check extracted files
+          shopt -u dotglob nullglob
+
+      - name: Verify Android project
         shell: bash
         run: |
           echo "===== PROJECT FILES ====="
-          find . -maxdepth 3 -type f \
+
+          find . -maxdepth 5 -type f \
             ! -path "./.git/*" \
             | sort
+
           echo "========================="
+
+          test -f settings.gradle || \
+          test -f settings.gradle.kts || \
+          {
+            echo "ERROR: Android Gradle project not found."
+            exit 1
+          }
+
+          test -f app/build.gradle || \
+          test -f app/build.gradle.kts || \
+          {
+            echo "ERROR: app/build.gradle not found."
+            exit 1
+          }
 
       - name: Commit extracted project
         shell: bash
@@ -105,5 +163,6 @@ jobs:
             exit 0
           fi
 
-          git commit -m "Extract project ZIP"
+          git commit -m "Extract Android project [skip ci]"
+
           git push
