@@ -1,23 +1,30 @@
-name: Extract SADEE X DIMA ZIP
+name: Extract ZIP to Repository
 
 on:
   workflow_dispatch:
+
   push:
     paths:
       - "*.zip"
 
+permissions:
+  contents: write
+
 jobs:
-  extract:
+  extract-zip:
+    name: Extract ZIP
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: write
-
     steps:
-      - name: Checkout repository
+      # 1. Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Find and extract ZIP
+      # 2. Find ZIP file
+      - name: Find ZIP
+        id: find_zip
         shell: bash
         run: |
           set -e
@@ -25,37 +32,81 @@ jobs:
           ZIP_FILE=$(find . -maxdepth 1 -type f -iname "*.zip" | head -n 1)
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "❌ No ZIP file found"
+            echo "❌ ZIP file not found!"
             exit 1
           fi
 
-          echo "📦 Found: $ZIP_FILE"
+          echo "📦 ZIP found: $ZIP_FILE"
+          echo "zip_file=$ZIP_FILE" >> "$GITHUB_OUTPUT"
 
-          mkdir -p extracted
+      # 3. Extract ZIP
+      - name: Extract ZIP
+        shell: bash
+        run: |
+          set -e
 
-          unzip -o "$ZIP_FILE" -d extracted
+          ZIP_FILE="${{ steps.find_zip.outputs.zip_file }}"
+
+          rm -rf .github/extracted
+          mkdir -p .github/extracted
+
+          echo "📦 Extracting $ZIP_FILE ..."
+
+          unzip -o "$ZIP_FILE" -d .github/extracted
 
           echo "✅ ZIP extracted successfully"
 
-          find extracted -maxdepth 3 -type f | head -100
-
-      - name: Move extracted files to repository
+      # 4. Detect single folder inside ZIP
+      - name: Prepare Extracted Files
         shell: bash
         run: |
-          shopt -s dotglob
+          set -e
 
-          if [ -d "extracted" ]; then
-            cp -R extracted/* .
+          EXTRACT_DIR=".github/extracted"
+
+          shopt -s dotglob nullglob
+
+          ITEMS=("$EXTRACT_DIR"/*)
+
+          if [ ${#ITEMS[@]} -eq 1 ] && [ -d "${ITEMS[0]}" ]; then
+            echo "📁 Single folder detected:"
+            echo "${ITEMS[0]}"
+
+            cp -R "${ITEMS[0]}"/. .
+
+          else
+            echo "📂 Multiple files/folders detected"
+
+            cp -R "$EXTRACT_DIR"/. .
           fi
 
-          rm -rf extracted
-
-      - name: Remove ZIP
+      # 5. Remove temporary files
+      - name: Cleanup
         shell: bash
         run: |
-          rm -f ./*.zip
+          rm -rf .github/extracted
 
-      - name: Commit extracted files
+          ZIP_FILE="${{ steps.find_zip.outputs.zip_file }}"
+          rm -f "$ZIP_FILE"
+
+          echo "🧹 Cleanup complete"
+
+      # 6. Show extracted files
+      - name: Verify Files
+        shell: bash
+        run: |
+          echo "================================="
+          echo "✅ EXTRACTED REPOSITORY FILES"
+          echo "================================="
+
+          find . -maxdepth 3 -type f \
+            ! -path "./.git/*" \
+            | sort \
+            | head -200
+
+      # 7. Commit changes
+      - name: Commit Changes
+        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -63,8 +114,18 @@ jobs:
           git add -A
 
           if git diff --cached --quiet; then
-            echo "ℹ️ Nothing to commit"
-          else
-            git commit -m "Extract SADEE X DIMA source ZIP"
-            git push
+            echo "ℹ️ No changes to commit"
+            exit 0
           fi
+
+          git commit -m "Extract ZIP source files"
+
+      # 8. Push changes
+      - name: Push Changes
+        shell: bash
+        run: |
+          git push
+
+          echo "================================="
+          echo "🚀 ZIP EXTRACTION COMPLETE"
+          echo "================================="
