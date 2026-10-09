@@ -1,278 +1,70 @@
-name: SADEE X DIMA - FINAL BUILD
+name: Extract SADEE X DIMA ZIP
 
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
-
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: sadee-x-dima-final
-  cancel-in-progress: true
+    paths:
+      - "*.zip"
 
 jobs:
-
-  build-android:
-    name: Build Gaming + Admin APK
+  extract:
     runs-on: ubuntu-latest
 
-    steps:
-
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Locate and Validate FINAL ZIP
-        shell: bash
-        run: |
-          set -e
-
-          ZIP="./SADEE_X_DIMA_FINAL_SOURCE.zip"
-
-          if [ ! -f "$ZIP" ]; then
-            echo "ERROR: $ZIP not found"
-            echo "ZIP files currently in repository:"
-            find . -maxdepth 1 -type f -iname "*.zip" -print
-            exit 1
-          fi
-
-          echo "Checking ZIP integrity..."
-          unzip -t "$ZIP"
-
-          echo "ZIP OK: $ZIP"
-          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
-
-      - name: Extract Source
-        shell: bash
-        run: |
-          set -e
-
-          rm -rf extracted
-          mkdir -p extracted
-
-          unzip -o "$ZIP" -d extracted
-
-          echo "Extraction completed."
-
-      - name: Locate Project Folders
-        shell: bash
-        run: |
-          set -e
-
-          GAME_DIR=$(find extracted -type d -name "gaming-app" | head -1)
-          ADMIN_DIR=$(find extracted -type d -name "admin-app" | head -1)
-
-          if [ -z "$GAME_DIR" ]; then
-            echo "gaming-app not found"
-            find extracted -maxdepth 4 -type d
-            exit 1
-          fi
-
-          if [ -z "$ADMIN_DIR" ]; then
-            echo "admin-app not found"
-            find extracted -maxdepth 4 -type d
-            exit 1
-          fi
-
-          echo "GAME_DIR=$GAME_DIR" >> "$GITHUB_ENV"
-          echo "ADMIN_DIR=$ADMIN_DIR" >> "$GITHUB_ENV"
-
-          echo "Gaming: $GAME_DIR"
-          echo "Admin: $ADMIN_DIR"
-
-      - name: Fix Gaming Lambda Callbacks
-        shell: bash
-        run: |
-          set -e
-
-          FILE=$(find "$GAME_DIR" \
-            -type f \
-            -name "MainActivity.java" \
-            | head -1)
-
-          if [ -z "$FILE" ]; then
-            echo "MainActivity.java not found"
-            exit 1
-          fi
-
-          python3 - "$FILE" <<'PY'
-          import sys
-          import re
-
-          path = sys.argv[1]
-
-          with open(path, "r", encoding="utf-8") as f:
-              s = f.read()
-
-          patterns = [
-              (r'(gameCard\("FREE FIRE","freefire_art",CYAN),\(\)->', r'\1,(v)->'),
-              (r'(gameCard\("FREE FIRE MAX","freefire_art",RED),\(\)->', r'\1,(v)->'),
-              (r'(gameCard\("PUBG MOBILE","pubg_art",PURPLE),\(\)->', r'\1,(v)->'),
-              (r'(gameCard\("COD MOBILE","cod_art",CYAN),\(\)->', r'\1,(v)->')
-          ]
-
-          for old, new in patterns:
-              s = re.sub(old, new, s)
-
-          with open(path, "w", encoding="utf-8") as f:
-              f.write(s)
-
-          print("Lambda callback compatibility fix completed.")
-          PY
-
-      - name: Setup Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Setup Gradle 8.9
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.9"
-
-      - name: Build Gaming Optimizer
-        shell: bash
-        run: |
-          set -e
-
-          cd "$GAME_DIR"
-
-          chmod +x gradlew 2>/dev/null || true
-
-          if [ -f gradlew ]; then
-            ./gradlew clean assembleDebug --no-daemon
-          else
-            gradle clean assembleDebug --no-daemon
-          fi
-
-      - name: Build Admin App
-        shell: bash
-        run: |
-          set -e
-
-          cd "$ADMIN_DIR"
-
-          chmod +x gradlew 2>/dev/null || true
-
-          if [ -f gradlew ]; then
-            ./gradlew clean assembleDebug --no-daemon
-          else
-            gradle clean assembleDebug --no-daemon
-          fi
-
-      - name: Collect APKs
-        shell: bash
-        run: |
-          set -e
-
-          mkdir -p release
-
-          GAME_APK=$(find "$GAME_DIR/app/build/outputs/apk" \
-            -type f -name "*.apk" | head -1)
-
-          ADMIN_APK=$(find "$ADMIN_DIR/app/build/outputs/apk" \
-            -type f -name "*.apk" | head -1)
-
-          if [ -z "$GAME_APK" ]; then
-            echo "Gaming APK not found"
-            exit 1
-          fi
-
-          if [ -z "$ADMIN_APK" ]; then
-            echo "Admin APK not found"
-            exit 1
-          fi
-
-          cp "$GAME_APK" \
-            release/SADEE_X_DIMA_GAMING_OPTIMIZER.apk
-
-          cp "$ADMIN_APK" \
-            release/SADEE_X_DIMA_ADMIN.apk
-
-          ls -lh release
-
-      - name: Upload APKs
-        uses: actions/upload-artifact@v4
-        with:
-          name: SADEE-X-DIMA-FINAL-APKS
-          path: release/*.apk
-          retention-days: 30
-
-
-  deploy-admin:
-    name: Deploy Admin Web
-    runs-on: ubuntu-latest
-
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: write
 
     steps:
-
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Locate and Validate FINAL ZIP
+      - name: Find and extract ZIP
         shell: bash
         run: |
           set -e
 
-          ZIP="./SADEE_X_DIMA_FINAL_SOURCE.zip"
+          ZIP_FILE=$(find . -maxdepth 1 -type f -iname "*.zip" | head -n 1)
 
-          if [ ! -f "$ZIP" ]; then
-            echo "ERROR: $ZIP not found"
+          if [ -z "$ZIP_FILE" ]; then
+            echo "❌ No ZIP file found"
             exit 1
           fi
 
-          unzip -t "$ZIP"
+          echo "📦 Found: $ZIP_FILE"
 
-          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
-
-      - name: Extract Source
-        shell: bash
-        run: |
-          set -e
-
-          rm -rf extracted
           mkdir -p extracted
 
-          unzip -o "$ZIP" -d extracted
+          unzip -o "$ZIP_FILE" -d extracted
 
-      - name: Find Admin Panel
+          echo "✅ ZIP extracted successfully"
+
+          find extracted -maxdepth 3 -type f | head -100
+
+      - name: Move extracted files to repository
         shell: bash
         run: |
-          set -e
+          shopt -s dotglob
 
-          INDEX=$(find extracted \
-            -type f \
-            -path "*/admin-panel/index.html" \
-            | head -1)
-
-          if [ -z "$INDEX" ]; then
-            echo "admin-panel/index.html not found"
-            find extracted -type f -name "index.html"
-            exit 1
+          if [ -d "extracted" ]; then
+            cp -R extracted/* .
           fi
 
-          ADMIN_WEB=$(dirname "$INDEX")
+          rm -rf extracted
 
-          echo "ADMIN_WEB=$ADMIN_WEB" >> "$GITHUB_ENV"
+      - name: Remove ZIP
+        shell: bash
+        run: |
+          rm -f ./*.zip
 
-          echo "Admin panel: $ADMIN_WEB"
+      - name: Commit extracted files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
+          git add -A
 
-      - name: Upload Admin Panel
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ${{ env.ADMIN_WEB }}
-
-      - name: Deploy Admin Panel
-        id: deployment
-        uses: actions/deploy-pages@v4
+          if git diff --cached --quiet; then
+            echo "ℹ️ Nothing to commit"
+          else
+            git commit -m "Extract SADEE X DIMA source ZIP"
+            git push
+          fi
