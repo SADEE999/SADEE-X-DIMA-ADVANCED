@@ -1,42 +1,55 @@
-name: Extract ZIP to Repository
+name: Extract ZIP Automatically
 
 on:
   workflow_dispatch:
 
   push:
     paths:
-      - "*.zip"
+      - "**.zip"
 
 permissions:
   contents: write
 
 jobs:
-  extract-zip:
-    name: Extract ZIP
+  extract:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout repository
+
+      # 1. Download repository
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # 2. Find ZIP file
-      - name: Find ZIP
+      # 2. Find ZIP anywhere in repository
+      - name: Find ZIP File
         id: find_zip
         shell: bash
         run: |
           set -e
 
-          ZIP_FILE=$(find . -maxdepth 1 -type f -iname "*.zip" | head -n 1)
+          echo "🔎 Searching for ZIP files..."
+
+          ZIP_FILE=$(find . \
+            -type f \
+            -iname "*.zip" \
+            -not -path "./.git/*" \
+            | head -n 1)
 
           if [ -z "$ZIP_FILE" ]; then
             echo "❌ ZIP file not found!"
+            echo ""
+            echo "Files currently in repository:"
+            find . -maxdepth 4 -type f \
+              -not -path "./.git/*" \
+              | sort
             exit 1
           fi
 
-          echo "📦 ZIP found: $ZIP_FILE"
+          echo "✅ ZIP FOUND:"
+          echo "$ZIP_FILE"
+
           echo "zip_file=$ZIP_FILE" >> "$GITHUB_OUTPUT"
 
       # 3. Extract ZIP
@@ -47,64 +60,89 @@ jobs:
 
           ZIP_FILE="${{ steps.find_zip.outputs.zip_file }}"
 
-          rm -rf .github/extracted
-          mkdir -p .github/extracted
+          echo "📦 Extracting:"
+          echo "$ZIP_FILE"
 
-          echo "📦 Extracting $ZIP_FILE ..."
+          rm -rf .zip_extract
+          mkdir -p .zip_extract
 
-          unzip -o "$ZIP_FILE" -d .github/extracted
+          unzip -o "$ZIP_FILE" -d .zip_extract
 
-          echo "✅ ZIP extracted successfully"
+          echo "✅ Extraction completed!"
 
-      # 4. Detect single folder inside ZIP
-      - name: Prepare Extracted Files
+      # 4. Copy extracted files
+      - name: Copy Files To Repository
         shell: bash
         run: |
           set -e
 
-          EXTRACT_DIR=".github/extracted"
-
           shopt -s dotglob nullglob
+
+          EXTRACT_DIR=".zip_extract"
 
           ITEMS=("$EXTRACT_DIR"/*)
 
+          if [ ${#ITEMS[@]} -eq 0 ]; then
+            echo "❌ ZIP is empty!"
+            exit 1
+          fi
+
+          # If ZIP contains one main folder,
+          # copy the contents of that folder
           if [ ${#ITEMS[@]} -eq 1 ] && [ -d "${ITEMS[0]}" ]; then
-            echo "📁 Single folder detected:"
+
+            echo "📁 Main folder detected:"
             echo "${ITEMS[0]}"
 
             cp -R "${ITEMS[0]}"/. .
 
           else
-            echo "📂 Multiple files/folders detected"
+
+            echo "📂 Copying ZIP contents..."
 
             cp -R "$EXTRACT_DIR"/. .
+
           fi
 
-      # 5. Remove temporary files
+          echo "✅ Files copied!"
+
+      # 5. Remove ZIP and temporary files
       - name: Cleanup
         shell: bash
         run: |
-          rm -rf .github/extracted
+          set -e
 
           ZIP_FILE="${{ steps.find_zip.outputs.zip_file }}"
-          rm -f "$ZIP_FILE"
 
-          echo "🧹 Cleanup complete"
+          rm -rf .zip_extract
 
-      # 6. Show extracted files
-      - name: Verify Files
+          if [ -f "$ZIP_FILE" ]; then
+            rm -f "$ZIP_FILE"
+          fi
+
+          echo "🧹 Cleanup completed!"
+
+      # 6. Show result
+      - name: Verify Repository
         shell: bash
         run: |
-          echo "================================="
-          echo "✅ EXTRACTED REPOSITORY FILES"
-          echo "================================="
+          echo ""
+          echo "======================================"
+          echo "       SADEE X DIMA BUILD FILES"
+          echo "======================================"
+          echo ""
 
-          find . -maxdepth 3 -type f \
-            ! -path "./.git/*" \
+          find . \
+            -maxdepth 4 \
+            -type f \
+            -not -path "./.git/*" \
             | sort \
-            | head -200
+            | head -300
 
-      # 7. Commit changes
+          echo ""
+          echo "======================================"
+
+      # 7. Commit
       - name: Commit Changes
         shell: bash
         run: |
@@ -114,18 +152,19 @@ jobs:
           git add -A
 
           if git diff --cached --quiet; then
-            echo "ℹ️ No changes to commit"
+            echo "ℹ️ Nothing to commit."
             exit 0
           fi
 
-          git commit -m "Extract ZIP source files"
+          git commit -m "Extract ZIP files"
 
-      # 8. Push changes
+      # 8. Push
       - name: Push Changes
         shell: bash
         run: |
           git push
 
-          echo "================================="
-          echo "🚀 ZIP EXTRACTION COMPLETE"
-          echo "================================="
+          echo ""
+          echo "======================================"
+          echo "🚀 ZIP EXTRACTION SUCCESSFUL"
+          echo "======================================"
