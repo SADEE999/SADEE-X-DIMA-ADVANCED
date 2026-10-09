@@ -1,0 +1,12 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'com.sadee.gamingoptimizer'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'com.sadee.gamingoptimizer'
+        minSdk 23
+        targetSdk 35
+        versionCode 4
+        versionName '2.4.0'
+    }
+}

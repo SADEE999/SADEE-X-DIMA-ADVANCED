@@ -1,0 +1,32 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Android 11+ package visibility: allow the optimizer to detect supported games. -->
+    <queries>
+        <package android:name="com.dts.freefireth"/>
+        <package android:name="com.dts.freefiremax"/>
+        <package android:name="com.tencent.ig"/>
+        <package android:name="com.pubg.imobile"/>
+        <package android:name="com.pubg.krmobile"/>
+        <package android:name="com.vng.pubgmobile"/>
+        <package android:name="com.activision.callofduty.shooter"/>
+        <package android:name="com.garena.game.codm"/>
+    </queries>
+
+    <application
+        android:theme="@style/AppTheme"
+        android:label="SADEE X DIMA OPTIMIZER"
+        android:allowBackup="false"
+        android:supportsRtl="true"
+        android:icon="@drawable/sadee_logo">
+        <activity
+            android:name=".MainActivity"
+            android:screenOrientation="portrait"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
