@@ -1,74 +1,44 @@
-name: SADEE X DIMA PRO - Extract and Build APK
+name: SADEE X DIMA APK Builder
 
 on:
 workflow_dispatch:
 push:
-paths:
-- "*.zip"
+branches:
+- main
 
 permissions:
 contents: read
 
 jobs:
-build:
+extract:
 runs-on: ubuntu-latest
 
 steps:
-  - name: Checkout Repository
+  - name: Checkout repository
     uses: actions/checkout@v4
 
-  - name: Setup Java
-    uses: actions/setup-java@v4
-    with:
-      distribution: temurin
-      java-version: "17"
-
-  - name: Find and Extract ZIP
+  - name: Check ZIP files
     run: |
-      ZIP_FILE=$(find . -maxdepth 1 -type f -name "*.zip" | head -n 1)
+      find . -maxdepth 2 -type f -name "*.zip"
+
+  - name: Extract project ZIP
+    run: |
+      ZIP_FILE=$(find . -maxdepth 2 -type f -name "*.zip" | head -n 1)
 
       if [ -z "$ZIP_FILE" ]; then
-        echo "ERROR: ZIP file not found in repository root."
+        echo "ERROR: No ZIP file found in repository."
         exit 1
       fi
 
-      echo "Extracting: $ZIP_FILE"
       mkdir -p extracted
       unzip -o "$ZIP_FILE" -d extracted
 
-      echo "Extracted project files:"
-      find extracted -maxdepth 3 -type f | head -100
+      echo "ZIP extracted successfully."
+      find extracted -maxdepth 4 -type f | head -100
 
-  - name: Build Gaming App APK
-    working-directory: extracted/sadee_src/gaming-app
-    run: |
-      chmod +x gradlew 2>/dev/null || true
-      if [ -f gradlew ]; then
-        ./gradlew assembleDebug
-      else
-        gradle assembleDebug
-      fi
-
-  - name: Build Admin App APK
-    working-directory: extracted/sadee_src/admin-app
-    run: |
-      chmod +x gradlew 2>/dev/null || true
-      if [ -f gradlew ]; then
-        ./gradlew assembleDebug
-      else
-        gradle assembleDebug
-      fi
-
-  - name: Upload Gaming APK
+  - name: Upload extracted project
     uses: actions/upload-artifact@v4
     with:
-      name: SADEE-X-DIMA-Gaming-APK
-      path: extracted/sadee_src/gaming-app/app/build/outputs/apk/debug/*.apk
-      if-no-files-found: error
-
-  - name: Upload Admin APK
-    uses: actions/upload-artifact@v4
-    with:
-      name: SADEE-X-DIMA-Admin-APK
-      path: extracted/sadee_src/admin-app/app/build/outputs/apk/debug/*.apk
+      name: SADEE-X-DIMA-EXTRACTED
+      path: extracted/
       if-no-files-found: error
