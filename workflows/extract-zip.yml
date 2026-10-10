@@ -1,0 +1,76 @@
+name: Auto Extract ZIP
+
+on:
+  push:
+    paths:
+      - "**.zip"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Find Uploaded ZIP
+        id: find_zip
+        shell: bash
+        run: |
+          set -e
+          ZIP_FILE=$(find . -type f -iname "*.zip" -not -path "./.git/*" | head -n 1)
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ZIP file not found!"
+            exit 1
+          fi
+          echo "ZIP FOUND: $ZIP_FILE"
+          echo "zip_file=$ZIP_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Extract ZIP
+        shell: bash
+        run: |
+          set -e
+          ZIP_FILE="${{ steps.find_zip.outputs.zip_file }}"
+          rm -rf _extracted
+          mkdir -p _extracted
+          unzip -o "$ZIP_FILE" -d _extracted
+
+      - name: Move Extracted Files
+        shell: bash
+        run: |
+          set -e
+          shopt -s dotglob nullglob
+          ITEMS=(_extracted/*)
+          if [ ${#ITEMS[@]} -eq 1 ] && [ -d "${ITEMS[0]}" ]; then
+            cp -R "${ITEMS[0]}"/. .
+          else
+            cp -R _extracted/. .
+          fi
+
+      - name: Remove ZIP
+        shell: bash
+        run: |
+          ZIP_FILE="${{ steps.find_zip.outputs.zip_file }}"
+          rm -rf _extracted
+          rm -f "$ZIP_FILE"
+
+      - name: Commit Changes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "Auto extract uploaded ZIP"
+
+      - name: Push Extracted Files
+        run: git push
