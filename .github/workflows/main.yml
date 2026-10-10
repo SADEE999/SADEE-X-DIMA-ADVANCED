@@ -4,7 +4,6 @@ on:
   push:
     paths:
       - "**.zip"
-
   workflow_dispatch:
 
 permissions:
@@ -15,100 +14,58 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Find Uploaded ZIP
-        id: find_zip
-        shell: bash
+      - name: Find ZIP
+        id: zip
         run: |
-          set -e
+          ZIP=$(find . -type f -iname "*.zip" -not -path "./.git/*" | head -n 1)
 
-          echo "🔎 Searching for uploaded ZIP..."
-
-          ZIP_FILE=$(find . \
-            -type f \
-            -iname "*.zip" \
-            -not -path "./.git/*" \
-            | head -n 1)
-
-          if [ -z "$ZIP_FILE" ]; then
-            echo "❌ No ZIP file found!"
+          if [ -z "$ZIP" ]; then
+            echo "❌ ZIP file not found"
             exit 1
           fi
 
-          echo "✅ ZIP FOUND: $ZIP_FILE"
-
-          echo "zip_file=$ZIP_FILE" >> "$GITHUB_OUTPUT"
+          echo "Found: $ZIP"
+          echo "file=$ZIP" >> "$GITHUB_OUTPUT"
 
       - name: Extract ZIP
-        shell: bash
         run: |
           set -e
 
-          ZIP_FILE="${{ steps.find_zip.outputs.zip_file }}"
+          ZIP="${{ steps.zip.outputs.file }}"
 
-          echo "📦 Extracting: $ZIP_FILE"
+          rm -rf extracted
+          mkdir extracted
 
-          rm -rf _extracted
-          mkdir -p _extracted
+          unzip -o "$ZIP" -d extracted
 
-          unzip -o "$ZIP_FILE" -d _extracted
+          echo "✅ ZIP extracted"
 
-          echo "✅ ZIP extracted successfully!"
-
-      - name: Move Extracted Files
-        shell: bash
+      - name: Copy files to repository
         run: |
           set -e
 
           shopt -s dotglob nullglob
+          ITEMS=(extracted/*)
 
-          ITEMS=(_extracted/*)
-
-          # ZIP එක ඇතුළේ එක main folder එකක් විතරක් තිබුණොත්
-          # ඒ folder එකේ contents repo root එකට දානවා.
+          # ZIP එක ඇතුළේ එක folder එකක් විතරක් නම්
+          # ඒ folder එකේ files root එකට ගන්නවා.
           if [ ${#ITEMS[@]} -eq 1 ] && [ -d "${ITEMS[0]}" ]; then
-
-            echo "📁 Main folder detected"
             cp -R "${ITEMS[0]}"/. .
-
           else
-
-            echo "📂 Copying extracted files"
-            cp -R _extracted/. .
-
+            cp -R extracted/. .
           fi
 
-      - name: Remove ZIP
-        shell: bash
+      - name: Delete ZIP
         run: |
-          ZIP_FILE="${{ steps.find_zip.outputs.zip_file }}"
+          rm -rf extracted
+          rm -f "${{ steps.zip.outputs.file }}"
 
-          rm -rf _extracted
-          rm -f "$ZIP_FILE"
-
-          echo "🧹 ZIP removed"
-
-      - name: Show Extracted Files
-        shell: bash
-        run: |
-          echo ""
-          echo "======================================"
-          echo "       EXTRACTED FILES"
-          echo "======================================"
-
-          find . \
-            -maxdepth 4 \
-            -type f \
-            -not -path "./.git/*" \
-            | sort
-
-      - name: Commit Changes
-        shell: bash
+      - name: Commit extracted files
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -116,18 +73,12 @@ jobs:
           git add -A
 
           if git diff --cached --quiet; then
-            echo "ℹ️ No changes to commit."
+            echo "No changes"
             exit 0
           fi
 
-          git commit -m "Auto extract uploaded ZIP"
+          git commit -m "Auto extract ZIP"
 
-      - name: Push Extracted Files
-        shell: bash
+      - name: Push
         run: |
           git push
-
-          echo ""
-          echo "======================================"
-          echo "🚀 ZIP EXTRACTION COMPLETE"
-          echo "======================================"
