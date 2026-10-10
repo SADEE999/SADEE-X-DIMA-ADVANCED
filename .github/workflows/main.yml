@@ -1,16 +1,12 @@
-name: SADEE X DIMA APK Builder
+name: SADEE X DIMA - Extract and Build Both APKs
 
-on:
-workflow_dispatch:
-push:
-branches:
-- main
+on: [push, workflow_dispatch]
 
 permissions:
 contents: read
 
 jobs:
-build:
+extract-and-build:
 runs-on: ubuntu-latest
 
 steps:
@@ -28,52 +24,74 @@ steps:
     with:
       gradle-version: "8.9"
 
-  - name: Find and Extract ZIP
+  - name: Extract Uploaded ZIP
     shell: bash
     run: |
-      set -euo pipefail
+      set -eu
 
-      ZIP_FILE="$(find . -maxdepth 2 -type f -name '*.zip' \
+      ZIP_FILE="$(find . -maxdepth 3 -type f -name '*.zip' \
         -not -path './.git/*' | head -n 1)"
 
       if [ -z "$ZIP_FILE" ]; then
-        echo "ERROR: ZIP file not found."
-        echo "Upload your project ZIP to the repository first."
+        echo "ERROR: No ZIP found in repository."
         exit 1
       fi
 
-      echo "Extracting: $ZIP_FILE"
+      echo "Found ZIP: $ZIP_FILE"
       mkdir -p extracted
       unzip -o "$ZIP_FILE" -d extracted
 
-      echo "Extracted project folders:"
-      find extracted -maxdepth 4 -type f \
-        \( -name 'settings.gradle' -o -name 'build.gradle' \)
+      echo "Extracted project:"
+      find extracted -maxdepth 4 -type f | head -100
+
+  - name: Locate Both Apps
+    shell: bash
+    run: |
+      set -eu
+
+      GAMING_DIR="$(find extracted -type f -name settings.gradle \
+        -print | while read f; do
+          case "$f" in
+            */gaming-app/settings.gradle) dirname "$f";;
+          esac
+        done | head -n 1)"
+
+      ADMIN_DIR="$(find extracted -type f -name settings.gradle \
+        -print | while read f; do
+          case "$f" in
+            */admin-app/settings.gradle) dirname "$f";;
+          esac
+        done | head -n 1)"
+
+      test -n "$GAMING_DIR" || {
+        echo "Gaming app Gradle project not found."
+        exit 1
+      }
+
+      test -n "$ADMIN_DIR" || {
+        echo "Admin app Gradle project not found."
+        exit 1
+      }
+
+      echo "GAMING_DIR=$GAMING_DIR" >> "$GITHUB_ENV"
+      echo "ADMIN_DIR=$ADMIN_DIR" >> "$GITHUB_ENV"
 
   - name: Build Gaming APK
-    shell: bash
-    run: |
-      set -euo pipefail
-      cd extracted/sadee_src/gaming-app
-      gradle assembleDebug
+    run: gradle -p "$GAMING_DIR" assembleDebug
 
   - name: Build Admin APK
-    shell: bash
-    run: |
-      set -euo pipefail
-      cd extracted/sadee_src/admin-app
-      gradle assembleDebug
+    run: gradle -p "$ADMIN_DIR" assembleDebug
 
   - name: Upload Gaming APK
     uses: actions/upload-artifact@v4
     with:
       name: SADEE-X-DIMA-Gaming-APK
-      path: extracted/sadee_src/gaming-app/app/build/outputs/apk/debug/*.apk
+      path: ${{ env.GAMING_DIR }}/app/build/outputs/apk/debug/*.apk
       if-no-files-found: error
 
   - name: Upload Admin APK
     uses: actions/upload-artifact@v4
     with:
       name: SADEE-X-DIMA-Admin-APK
-      path: extracted/sadee_src/admin-app/app/build/outputs/apk/debug/*.apk
+      path: ${{ env.ADMIN_DIR }}/app/build/outputs/apk/debug/*.apk
       if-no-files-found: error
