@@ -1,94 +1,101 @@
 
-name: SADEE X DIMA - Build APKs
+name: Extract ZIP and Build Android APK
 
-'on':
-  push:
-    branches: [main]
+on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "*.zip"
+      - ".github/workflows/build-from-zip.yml"
 
 permissions:
   contents: read
 
 jobs:
-  build:
+  extract-and-build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
-
-      - name: Extract Fixed ZIP
+      - name: Find and extract uploaded ZIP
         shell: bash
         run: |
           set -euo pipefail
 
-          ZIP_FILE="$(find . -maxdepth 3 -type f \
-            -name 'SADEE_X_DIMA_PRO_FIXED.zip' \
-            -not -path './.git/*' | head -n 1)"
+          ZIP_FILE="$(find . -maxdepth 1 -type f -iname '*.zip' -print -quit)"
 
           if [ -z "$ZIP_FILE" ]; then
-            ZIP_FILE="$(find . -maxdepth 3 -type f \
-              -name '*.zip' -not -path './.git/*' | head -n 1)"
-          fi
-
-          if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: Project ZIP not found."
+            echo "ERROR: No ZIP file found in repository root."
             exit 1
           fi
 
+          echo "Extracting: $ZIP_FILE"
           mkdir -p extracted
           unzip -o "$ZIP_FILE" -d extracted
 
-          GAMING="$(find extracted -type f \
-            -name settings.gradle \
-            -path '*/gaming-app/settings.gradle' \
-            -print -quit | xargs -r dirname)"
+          echo "ZIP extraction complete."
+          find extracted -maxdepth 4 -type f | head -200
 
-          ADMIN="$(find extracted -type f \
-            -name settings.gradle \
-            -path '*/admin-app/settings.gradle' \
-            -print -quit | xargs -r dirname)"
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
 
-          test -n "$GAMING" || {
-            echo "Gaming project not found in ZIP."
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Build Android projects
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          BUILT=0
+
+          while IFS= read -r SETTINGS; do
+            APP_DIR="$(dirname "$SETTINGS")"
+
+            if [ ! -f "$APP_DIR/build.gradle" ] &&
+               [ ! -f "$APP_DIR/build.gradle.kts" ]; then
+              continue
+            fi
+
+            echo "Building project: $APP_DIR"
+
+            (
+              cd "$APP_DIR"
+              gradle --no-daemon assembleDebug
+            )
+
+            while IFS= read -r APK; do
+              NAME="$(basename "$APP_DIR")"
+              cp "$APK" "release/${NAME}-debug.apk"
+              BUILT=$((BUILT + 1))
+            done < <(
+              find "$APP_DIR" -type f \
+                -path '*/build/outputs/apk/*/*.apk'
+            )
+
+          done < <(
+            find extracted -type f \
+              \( -name settings.gradle -o -name settings.gradle.kts \)
+          )
+
+          if [ "$BUILT" -eq 0 ]; then
+            echo "No APK was built. Check the Gradle project structure and build logs."
             exit 1
-          }
+          fi
 
-          test -n "$ADMIN" || {
-            echo "Admin project not found in ZIP."
-            exit 1
-          }
-
-          echo "GAMING_DIR=$GAMING" >> "$GITHUB_ENV"
-          echo "ADMIN_DIR=$ADMIN" >> "$GITHUB_ENV"
-
-      - name: Build Gaming APK
-        run: gradle -p "$GAMING_DIR" assembleDebug
-
-      - name: Build Admin APK
-        run: gradle -p "$ADMIN_DIR" assembleDebug
-
-      - name: Upload Gaming APK
+      - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: SADEE-X-DIMA-Gaming-APK
-          path: ${{ env.GAMING_DIR }}/app/build/outputs/apk/debug/*.apk
+          name: SADEE-X-DIMA-APKs
+          path: release/*.apk
           if-no-files-found: error
-
-      - name: Upload Admin APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: SADEE-X-DIMA-Admin-APK
-          path: ${{ env.ADMIN_DIR }}/app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
+          retention-days: 14
