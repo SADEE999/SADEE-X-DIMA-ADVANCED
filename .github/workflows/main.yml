@@ -1,11 +1,10 @@
 
-name: Extract ZIP and Build Android APK
+name: SADEE X DIMA - Extract Nested ZIP and Build
 
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
       - "*.zip"
       - ".github/workflows/build-from-zip.yml"
@@ -14,31 +13,48 @@ permissions:
   contents: read
 
 jobs:
-  extract-and-build:
+  build:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Find and extract uploaded ZIP
+      - name: Extract outer and inner ZIP files
         shell: bash
         run: |
           set -euo pipefail
 
-          ZIP_FILE="$(find . -maxdepth 1 -type f -iname '*.zip' -print -quit)"
+          ZIP_FILE="$(find . -maxdepth 1 -type f \
+            -iname '*.zip' -print -quit)"
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: No ZIP file found in repository root."
+            echo "ERROR: Outer ZIP not found."
             exit 1
           fi
 
-          echo "Extracting: $ZIP_FILE"
           mkdir -p extracted
           unzip -o "$ZIP_FILE" -d extracted
 
-          echo "ZIP extraction complete."
-          find extracted -maxdepth 4 -type f | head -200
+          INNER_ZIP="$(find extracted -type f \
+            -name 'SADEE_X_DIMA_PRO_FREE_FIRE_UPGRADED_SOURCE.zip' \
+            -print -quit)"
+
+          if [ -z "$INNER_ZIP" ]; then
+            echo "ERROR: Inner source ZIP not found."
+            find extracted -type f
+            exit 1
+          fi
+
+          mkdir -p extracted/source_project
+          unzip -o "$INNER_ZIP" -d extracted/source_project
+
+          echo "ZIP extraction completed."
+          echo "Searching for Android Gradle projects..."
+
+          find extracted/source_project -type f \
+            \( -name settings.gradle \
+            -o -name settings.gradle.kts \)
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -51,7 +67,7 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Build Android projects
+      - name: Build Android APKs
         shell: bash
         run: |
           set -euo pipefail
@@ -61,12 +77,7 @@ jobs:
           while IFS= read -r SETTINGS; do
             APP_DIR="$(dirname "$SETTINGS")"
 
-            if [ ! -f "$APP_DIR/build.gradle" ] &&
-               [ ! -f "$APP_DIR/build.gradle.kts" ]; then
-              continue
-            fi
-
-            echo "Building project: $APP_DIR"
+            echo "Checking project: $APP_DIR"
 
             (
               cd "$APP_DIR"
@@ -74,8 +85,12 @@ jobs:
             )
 
             while IFS= read -r APK; do
+              REL="${APK#"$APP_DIR"/}"
               NAME="$(basename "$APP_DIR")"
-              cp "$APK" "release/${NAME}-debug.apk"
+              DEST="release/${NAME}-debug.apk"
+
+              cp "$APK" "$DEST"
+              echo "Created: $DEST"
               BUILT=$((BUILT + 1))
             done < <(
               find "$APP_DIR" -type f \
@@ -83,12 +98,13 @@ jobs:
             )
 
           done < <(
-            find extracted -type f \
-              \( -name settings.gradle -o -name settings.gradle.kts \)
+            find extracted/source_project -type f \
+              \( -name settings.gradle \
+              -o -name settings.gradle.kts \)
           )
 
           if [ "$BUILT" -eq 0 ]; then
-            echo "No APK was built. Check the Gradle project structure and build logs."
+            echo "ERROR: No APK produced."
             exit 1
           fi
 
