@@ -4,75 +4,107 @@ name: SADEE X DIMA APK Build
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Java 17
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Extract Nested ZIP Files
+      - name: Extract All ZIP Files
         shell: bash
         run: |
           set -euo pipefail
 
           mkdir -p extracted
-          find . -maxdepth 1 -type f -iname "*.zip" \
-            -print0 > /tmp/ziplist
+          find . -maxdepth 1 -type f -iname '*.zip' \
+            -exec unzip -oq '{}' -d extracted \;
 
-          while IFS= read -r -d '' zipfile; do
-            echo "Checking: $zipfile"
-            unzip -oq "$zipfile" -d extracted
-          done < /tmp/ziplist
+          for round in 1 2 3 4 5; do
+            found=0
 
-          for round in 1 2 3; do
-            find extracted -type f -iname "*.zip" \
-              -print0 > /tmp/nested-zips
+            while IFS= read -r -d '' z; do
+              found=1
+              dest="${z%.zip}_unpacked"
+              mkdir -p "$dest"
+              unzip -oq "$z" -d "$dest"
+            done < <(
+              find extracted -type f -iname '*.zip' \
+                -not -path '*/_unpacked/*' -print0
+            )
 
-            while IFS= read -r -d '' zipfile; do
-              echo "Extracting nested ZIP: $zipfile"
-              target="${zipfile%.zip}_extracted"
-              mkdir -p "$target"
-              unzip -oq "$zipfile" -d "$target"
-            done < /tmp/nested-zips
+            [ "$found" -eq 1 ] || break
           done
 
-      - name: Locate Android Gradle Project
+      - name: Diagnose Android Project
+        shell: bash
+        run: |
+          echo "=== Extracted files ==="
+          find extracted -maxdepth 5 -type f | head -200
+
+          echo "=== Gradle project files ==="
+          find extracted -type f \( \
+            -name gradlew -o \
+            -name settings.gradle -o \
+            -name settings.gradle.kts -o \
+            -name build.gradle -o \
+            -name build.gradle.kts \
+          \) -print
+
+      - name: Find Project
         shell: bash
         run: |
           set -euo pipefail
 
-          GRADLEW="$(find extracted -type f \
+          WRAPPER="$(find extracted -type f \
             -name gradlew -print -quit)"
 
-          if [ -z "$GRADLEW" ]; then
-            echo "ERROR: Android project not found in ZIP"
-            echo "The extracted files must contain gradlew."
+          if [ -n "$WRAPPER" ]; then
+            DIR="$(dirname "$WRAPPER")"
+            chmod +x "$WRAPPER"
+            echo "BUILD_DIR=$DIR" >> "$GITHUB_ENV"
+            echo "BUILD_CMD=./gradlew" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          SETTINGS="$(find extracted -type f \( \
+            -name settings.gradle -o \
+            -name settings.gradle.kts \
+          \) -print -quit)"
+
+          if [ -z "$SETTINGS" ]; then
+            echo "ERROR: No Gradle Android project found."
+            echo "Check the diagnostic output above."
             exit 1
           fi
 
-          PROJECT_DIR="$(dirname "$GRADLEW")"
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          chmod +x "$GRADLEW"
+          DIR="$(dirname "$SETTINGS")"
+          echo "BUILD_DIR=$DIR" >> "$GITHUB_ENV"
+          echo "BUILD_CMD=gradle" >> "$GITHUB_ENV"
 
-      - name: Build Debug APK
+      - name: Setup Gradle
+        if: env.BUILD_CMD == 'gradle'
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Build APK
         shell: bash
         run: |
           set -euo pipefail
-          cd "$PROJECT_DIR"
-          ./gradlew assembleDebug --stacktrace
+          cd "$BUILD_DIR"
+          $BUILD_CMD assembleDebug --stacktrace
 
-      - name: Upload APK Artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: SADEE-X-DIMA-APK
