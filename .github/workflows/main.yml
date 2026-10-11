@@ -4,109 +4,64 @@ name: SADEE X DIMA APK Build
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Java
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Extract All ZIP Files
+      - name: Find Android Project
         shell: bash
         run: |
           set -euo pipefail
 
-          mkdir -p extracted
-          find . -maxdepth 1 -type f -iname '*.zip' \
-            -exec unzip -oq '{}' -d extracted \;
+          echo "Checking Android project files..."
 
-          for round in 1 2 3 4 5; do
-            found=0
+          PROJECT_DIR=""
 
-            while IFS= read -r -d '' z; do
-              found=1
-              dest="${z%.zip}_unpacked"
-              mkdir -p "$dest"
-              unzip -oq "$z" -d "$dest"
-            done < <(
-              find extracted -type f -iname '*.zip' \
-                -not -path '*/_unpacked/*' -print0
-            )
-
-            [ "$found" -eq 1 ] || break
-          done
-
-      - name: Diagnose Android Project
-        shell: bash
-        run: |
-          echo "=== Extracted files ==="
-          find extracted -maxdepth 5 -type f | head -200
-
-          echo "=== Gradle project files ==="
-          find extracted -type f \( \
-            -name gradlew -o \
-            -name settings.gradle -o \
-            -name settings.gradle.kts -o \
-            -name build.gradle -o \
-            -name build.gradle.kts \
-          \) -print
-
-      - name: Find Project
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          WRAPPER="$(find extracted -type f \
-            -name gradlew -print -quit)"
-
-          if [ -n "$WRAPPER" ]; then
-            DIR="$(dirname "$WRAPPER")"
-            chmod +x "$WRAPPER"
-            echo "BUILD_DIR=$DIR" >> "$GITHUB_ENV"
-            echo "BUILD_CMD=./gradlew" >> "$GITHUB_ENV"
-            exit 0
+          if [ -f "./gradlew" ]; then
+            PROJECT_DIR="."
+          else
+            PROJECT_DIR="$(find . -type f -name gradlew \
+              -not -path './.git/*' \
+              -print -quit | xargs -r dirname)"
           fi
 
-          SETTINGS="$(find extracted -type f \( \
-            -name settings.gradle -o \
-            -name settings.gradle.kts \
-          \) -print -quit)"
-
-          if [ -z "$SETTINGS" ]; then
-            echo "ERROR: No Gradle Android project found."
-            echo "Check the diagnostic output above."
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: gradlew was not found."
+            echo "Repository file list:"
+            find . -maxdepth 5 -type f | head -200
+            echo "Upload the complete Android source project."
             exit 1
           fi
 
-          DIR="$(dirname "$SETTINGS")"
-          echo "BUILD_DIR=$DIR" >> "$GITHUB_ENV"
-          echo "BUILD_CMD=gradle" >> "$GITHUB_ENV"
+          echo "Found project: $PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      - name: Setup Gradle
-        if: env.BUILD_CMD == 'gradle'
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.9"
+          chmod +x "$PROJECT_DIR/gradlew"
 
-      - name: Build APK
+      - name: Build Debug APK
         shell: bash
         run: |
           set -euo pipefail
-          cd "$BUILD_DIR"
-          $BUILD_CMD assembleDebug --stacktrace
+          cd "$PROJECT_DIR"
+          ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: SADEE-X-DIMA-APK
-          path: extracted/**/build/outputs/apk/debug/*.apk
+          path: |
+            **/build/outputs/apk/debug/*.apk
           if-no-files-found: error
