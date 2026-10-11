@@ -1,16 +1,11 @@
 
-name: SADEE X DIMA - Extract Nested ZIP and Build
+name: Build Android APK
 
 on:
   workflow_dispatch:
   push:
-    branches: [main]
-    paths:
-      - "*.zip"
-      - ".github/workflows/build-from-zip.yml"
-
-permissions:
-  contents: read
+    branches:
+      - main
 
 jobs:
   build:
@@ -20,98 +15,65 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract outer and inner ZIP files
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          ZIP_FILE="$(find . -maxdepth 1 -type f \
-            -iname '*.zip' -print -quit)"
-
-          if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: Outer ZIP not found."
-            exit 1
-          fi
-
-          mkdir -p extracted
-          unzip -o "$ZIP_FILE" -d extracted
-
-          INNER_ZIP="$(find extracted -type f \
-            -name 'SADEE_X_DIMA_PRO_FREE_FIRE_UPGRADED_SOURCE.zip' \
-            -print -quit)"
-
-          if [ -z "$INNER_ZIP" ]; then
-            echo "ERROR: Inner source ZIP not found."
-            find extracted -type f
-            exit 1
-          fi
-
-          mkdir -p extracted/source_project
-          unzip -o "$INNER_ZIP" -d extracted/source_project
-
-          echo "ZIP extraction completed."
-          echo "Searching for Android Gradle projects..."
-
-          find extracted/source_project -type f \
-            \( -name settings.gradle \
-            -o -name settings.gradle.kts \)
-
-      - name: Set up Java 17
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
+          cache: gradle
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.9"
-
-      - name: Build Android APKs
+      - name: Extract Android project ZIP
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p release
-          BUILT=0
 
-          while IFS= read -r SETTINGS; do
-            APP_DIR="$(dirname "$SETTINGS")"
+          ZIP_FILE=""
 
-            echo "Checking project: $APP_DIR"
+          while IFS= read -r -d '' file; do
+            if unzip -Z1 "$file" | grep -Eq '(^|/)gradlew$'; then
+              ZIP_FILE="$file"
+              break
+            fi
+          done < <(find . -type f -iname '*.zip' -print0)
 
-            (
-              cd "$APP_DIR"
-              gradle --no-daemon assembleDebug
-            )
-
-            while IFS= read -r APK; do
-              REL="${APK#"$APP_DIR"/}"
-              NAME="$(basename "$APP_DIR")"
-              DEST="release/${NAME}-debug.apk"
-
-              cp "$APK" "$DEST"
-              echo "Created: $DEST"
-              BUILT=$((BUILT + 1))
-            done < <(
-              find "$APP_DIR" -type f \
-                -path '*/build/outputs/apk/*/*.apk'
-            )
-
-          done < <(
-            find extracted/source_project -type f \
-              \( -name settings.gradle \
-              -o -name settings.gradle.kts \)
-          )
-
-          if [ "$BUILT" -eq 0 ]; then
-            echo "ERROR: No APK produced."
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: Android project ZIP containing gradlew was not found."
+            echo "Upload the source project ZIP into the repository."
             exit 1
           fi
 
-      - name: Upload APK artifacts
+          echo "Using ZIP: $ZIP_FILE"
+          mkdir -p extracted
+          unzip -oq "$ZIP_FILE" -d extracted
+
+      - name: Find Gradle project
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          GRADLEW="$(find extracted -type f -name gradlew -print -quit)"
+
+          if [ -z "$GRADLEW" ]; then
+            echo "ERROR: gradlew not found after extraction."
+            exit 1
+          fi
+
+          PROJECT_DIR="$(dirname "$GRADLEW")"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+          chmod +x "$GRADLEW"
+
+      - name: Build debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: SADEE-X-DIMA-APKs
-          path: release/*.apk
+          name: sadee-x-dima-debug-apk
+          path: |
+            ${{ env.PROJECT_DIR }}/**/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-          retention-days: 14
